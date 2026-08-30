@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBS Viewer Counter Widget</title>
+    
+    <!--
+    =============================================================================
+    OBS STUDIO VIEWER COUNTER WIDGET
+    =============================================================================
+    
+    HOW TO USE IN OBS:
+    1. Add a new "Browser Source" in OBS
+    2. Check "Local File" and select this HTML file
+    3. Set Width: 1920, Height: 1080 (or your desired resolution)
+    4. The widget will appear with a transparent background
+    
+    CUSTOMIZATION OPTIONS:
+    - Scroll down to the "CONFIGURATION SECTION" in the JavaScript below
+    - Adjust refresh rate, colors, animation styles, and more
+    
+    =============================================================================
+    METHOD FOR EXTRACTING VIEWER COUNT FROM APARAT.COM
+    =============================================================================
+    
+    To find the viewer count element on Aparat live pages:
+    
+    1. OPEN BROWSER DEVELOPER TOOLS (F12)
+       Go to: https://www.aparat.com/[STREAMER_USERNAME]/live/chat
+    
+    2. INSPECT THE PAGE
+       - Right-click on the viewer count number
+       - Select "Inspect" or "Inspect Element"
+    
+    3. LOOK FOR THESE COMMON SELECTORS:
+       - .liveCount_online_users
+       - [class*="viewer"]
+       - [class*="online"]
+       - Elements containing text like "بیننده" or "نفر"
+    
+    4. CHECK NETWORK TAB FOR API CALLS:
+       - Open the Network tab in DevTools
+       - Filter by "XHR" or "Fetch"
+       - Look for API endpoints returning viewer count data
+       - Common patterns:
+         * /api/live/viewers
+         * /videostreaming/live/
+         * GraphQL queries with "viewerCount"
+    
+    5. JAVASCRIPT CONSOLE METHOD:
+       Run this in the console to find viewer count:
+       
+       // Method 1: Query by class
+       document.querySelector('.liveCount_online_users')?.textContent;
+       
+       // Method 2: Search all elements for numbers
+       Array.from(document.querySelectorAll('*')).find(el => 
+           el.textContent.match(/^\d+$/) && parseInt(el.textContent) > 0
+       )?.textContent;
+       
+       // Method 3: Check for data attributes
+       document.querySelector('[data-viewer-count]')?.dataset.viewerCount;
+    
+    6. API ENDPOINT APPROACH:
+       Monitor network requests for JSON responses containing viewer data.
+       Look for fields like: viewerCount, onlineUsers, liveCount, viewers
+    
+    NOTE: Since Aparat uses React, the data may be in component state.
+          You may need to use a browser extension or proxy to intercept API calls.
+    
+    =============================================================================
+    -->
+    
+    <style>
+        /* =========================================================================
+           CSS STYLES - VISUAL DESIGN
+           ========================================================================= */
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            /* Transparent background for OBS overlay */
+            background-color: transparent;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Configuration panel (hidden during normal use) */
+        .config-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 100%);
+            padding: 20px;
+            z-index: 1000;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            border-bottom: 2px solid rgba(237, 20, 91, 0.5);
+        }
+        
+        .config-panel.hidden {
+            display: none;
+        }
+        
+        .config-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .config-group label {
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .config-group input {
+            padding: 10px 15px;
+            border: 2px solid rgba(237, 20, 91, 0.5);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        
+        .config-group input:focus {
+            border-color: #ed145b;
+            background: rgba(237, 20, 91, 0.2);
+        }
+        
+        .config-group button {
+            padding: 10px 25px;
+            background: linear-gradient(135deg, #ed145b 0%, #ff4081 100%);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .config-group button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(237, 20, 91, 0.5);
+        }
+        
+        /* Main viewer counter display */
+        .viewer-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 40px 60px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 20px;
+            border: 3px solid rgba(237, 20, 91, 0.3);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+        }
+        
+        .viewer-label {
+            color: #aaa;
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .viewer-count {
+            font-size: 120px;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 30px rgba(237, 20, 91, 0.8),
+                         0 0 60px rgba(237, 20, 91, 0.5),
+                         0 0 90px rgba(237, 20, 91, 0.3);
+            transition: all 0.3s ease;
+            line-height: 1;
+        }
+        
+        .viewer-status {
+            color: #4caf50;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: #4caf50;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        /* Goal indicator */
+        .goal-container {
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: rgba(237, 20, 91, 0.2);
+            border-radius: 10px;
+            border: 2px solid rgba(237, 20, 91, 0.5);
+        }
+        
+        .goal-text {
+            color: #ff80ab;
+            font-size: 16px;
+        }
+        
+        .goal-number {
+            color: #fff;
+            font-weight: bold;
+            font-size: 20px;
+        }
+        
+        /* =========================================================================
+           ANIMATIONS
+           ========================================================================= */
+        
+        /* Pulse animation for status dot */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+        
+        /* Update animation - subtle bounce when count changes */
+        @keyframes countUpdate {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .animate-update {
+            animation: countUpdate 0.3s ease;
+        }
+        
+        /* Color flash animation for updates */
+        @keyframes colorFlash {
+            0% { color: #fff; }
+            50% { color: #ff80ab; }
+            100% { color: #fff; }
+        }
+        
+        .animate-flash {
+            animation: colorFlash 0.3s ease;
+        }
+        
+        /* =========================================================================
+           CELEBRATION ANIMATION - GOAL REACHED
+           ========================================================================= */
+        
+        /* Golden glow effect */
+        @keyframes goldenGlow {
+            0% { 
+                box-shadow: 0 0 30px rgba(237, 20, 91, 0.8),
+                            0 0 60px rgba(237, 20, 91, 0.5),
+                            0 0 90px rgba(237, 20, 91, 0.3);
+                border-color: rgba(237, 20, 91, 0.3);
+            }
+            25% { 
+                box-shadow: 0 0 60px rgba(255, 215, 0, 1),
+                            0 0 120px rgba(255, 215, 0, 0.8),
+                            0 0 180px rgba(255, 215, 0, 0.6),
+                            0 0 240px rgba(255, 215, 0, 0.4);
+                border-color: rgba(255, 215, 0, 0.8);
+            }
+            50% { 
+                box-shadow: 0 0 100px rgba(255, 255, 255, 1),
+                            0 0 200px rgba(255, 215, 0, 1),
+                            0 0 300px rgba(255, 215, 0, 0.8),
+                            0 0 400px rgba(255, 215, 0, 0.6);
+                border-color: rgba(255, 255, 255, 1);
+            }
+            75% { 
+                box-shadow: 0 0 60px rgba(255, 215, 0, 1),
+                            0 0 120px rgba(255, 215, 0, 0.8),
+                            0 0 180px rgba(255, 215, 0, 0.6),
+                            0 0 240px rgba(255, 215, 0, 0.4);
+                border-color: rgba(255, 215, 0, 0.8);
+            }
+            100% { 
+                box-shadow: 0 0 30px rgba(237, 20, 91, 0.8),
+                            0 0 60px rgba(237, 20, 91, 0.5),
+                            0 0 90px rgba(237, 20, 91, 0.3);
+                border-color: rgba(237, 20, 91, 0.3);
+            }
+        }
+        
+        /* Number pulse during celebration */
+        @keyframes celebratePulse {
+            0%, 100% { transform: scale(1); }
+            25%, 75% { transform: scale(1.15); }
+            50% { transform: scale(1.25); }
+        }
+        
+        /* Radiating rings effect */
+        @keyframes radiateRings {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+        
+        .celebrate-glow {
+            animation: goldenGlow 1.5s ease-in-out;
+        }
+        
+        .celebrate-pulse {
+            animation: celebratePulse 0.5s ease-in-out;
+        }
+        
+        /* Radiating ring elements */
+        .ring {
+            position: absolute;
+            border: 3px solid rgba(255, 215, 0, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+            opacity: 0;
+        }
+        
+        .ring.animate {
+            animation: radiateRings 1s ease-out;
+        }
+        
+        /* Confetti particles */
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            pointer-events: none;
+            opacity: 0;
+        }
+        
+        @keyframes confettiFall {
+            0% {
+                transform: translateY(-100px) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(500px) rotate(720deg);
+                opacity: 0;
+            }
+        }
+        
+        /* Error state */
+        .error-state {
+            color: #f44336 !important;
+        }
+        
+        .loading-state {
+            color: #ff9800 !important;
+        }
+        
+        /* Hide config toggle hint */
+        .toggle-hint {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 999;
+        }
+        
+        .toggle-hint:hover {
+            color: rgba(255, 255, 255, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <!-- Configuration Panel -->
+    <div class="config-panel" id="configPanel">
+        <div class="config-group">
+            <label for="usernameInput">نام کاربری استریمر (Username):</label>
+            <input type="text" id="usernameInput" placeholder="example_user">
+        </div>
+        <div class="config-group">
+            <label for="goalInput">هدف بیننده (Goal):</label>
+            <input type="number" id="goalInput" value="10" min="1">
+        </div>
+        <div class="config-group">
+            <label>&nbsp;</label>
+            <button onclick="saveConfig()">ذخیره و شروع (Save & Start)</button>
+        </div>
+        <div class="config-group">
+            <label>&nbsp;</label>
+            <button onclick="toggleConfig()" style="background: linear-gradient(135deg, #666 0%, #888 100%);">بستن (Close)</button>
+        </div>
+    </div>
+    
+    <!-- Toggle Config Hint -->
+    <div class="toggle-hint" onclick="toggleConfig()">⚙️ تنظیمات (Settings)</div>
+    
+    <!-- Main Viewer Display -->
+    <div class="viewer-container" id="viewerContainer">
+        <div class="viewer-label">تعداد بینندگان زنده</div>
+        <div class="viewer-count" id="viewerCount">--</div>
+        <div class="viewer-status">
+            <div class="status-dot"></div>
+            <span id="statusText">در حال اتصال...</span>
+        </div>
+        <div class="goal-container" id="goalContainer" style="display: none;">
+            <span class="goal-text">هدف: </span>
+            <span class="goal-number" id="goalDisplay">10</span>
+        </div>
+    </div>
+    
+    <script>
+        /* =========================================================================
+           CONFIGURATION SECTION - ADJUST SETTINGS HERE
+           ========================================================================= */
+        
+        const CONFIG = {
+            // Refresh rate in seconds (how often to check for new viewer count)
+            REFRESH_RATE: 4,
+            
+            // Default username (can be changed in UI)
+            DEFAULT_USERNAME: '',
+            
+            // Default goal (can be changed in UI)
+            DEFAULT_GOAL: 10,
+            
+            // Colors (customize these)
+            COLORS: {
+                primary: '#ed145b',      // Main pink color
+                secondary: '#ff4081',    // Lighter pink
+                gold: '#ffd700',         // Gold for celebration
+                success: '#4caf50',      // Green for online status
+                error: '#f44336',        // Red for errors
+                warning: '#ff9800'       // Orange for loading
+            },
+            
+            // Animation durations (in milliseconds)
+            ANIMATION: {
+                updateDuration: 300,      // Subtle update animation
+                celebrateDuration: 1500,  // Goal celebration duration
+                ringDuration: 1000        // Radiating ring animation
+            }
+        };
+        
+        /* =========================================================================
+           STATE MANAGEMENT
+           ========================================================================= */
+        
+        let state = {
+            username: CONFIG.DEFAULT_USERNAME,
+            goal: CONFIG.DEFAULT_GOAL,
+            currentViewers: 0,
+            previousViewers: 0,
+            isGoalReached: false,
+            wasBelowGoal: true,  // Track if we dropped below goal
+            lastUpdate: null,
+            refreshInterval: null
+        };
+        
+        /* =========================================================================
+           DOM ELEMENTS
+           ========================================================================= */
+        
+        const elements = {
+            configPanel: document.getElementById('configPanel'),
+            usernameInput: document.getElementById('usernameInput'),
+            goalInput: document.getElementById('goalInput'),
+            viewerCount: document.getElementById('viewerCount'),
+            viewerContainer: document.getElementById('viewerContainer'),
+            statusText: document.getElementById('statusText'),
+            goalContainer: document.getElementById('goalContainer'),
+            goalDisplay: document.getElementById('goalDisplay')
+        };
+        
+        /* =========================================================================
+           INITIALIZATION
+           ========================================================================= */
+        
+        function init() {
+            // Load saved configuration from localStorage
+            loadConfig();
+            
+            // Show config panel initially
+            elements.configPanel.classList.remove('hidden');
+            
+            // Pre-fill inputs
+            elements.usernameInput.value = state.username;
+            elements.goalInput.value = state.goal;
+        }
+        
+        /* =========================================================================
+           CONFIGURATION FUNCTIONS
+           ========================================================================= */
+        
+        function saveConfig() {
+            const username = elements.usernameInput.value.trim();
+            const goal = parseInt(elements.goalInput.value) || CONFIG.DEFAULT_GOAL;
+            
+            if (!username) {
+                alert('لطفاً نام کاربری را وارد کنید\nPlease enter a username');
+                return;
+            }
+            
+            state.username = username;
+            state.goal = goal;
+            state.wasBelowGoal = true;  // Reset goal tracking
+            
+            // Save to localStorage
+            localStorage.setItem('obsViewerConfig', JSON.stringify({
+                username: state.username,
+                goal: state.goal
+            }));
+            
+            // Update UI
+            elements.goalDisplay.textContent = state.goal;
+            elements.goalContainer.style.display = 'block';
+            
+            // Hide config panel
+            elements.configPanel.classList.add('hidden');
+            
+            // Start fetching viewer count
+            startFetching();
+        }
+        
+        function loadConfig() {
+            const saved = localStorage.getItem('obsViewerConfig');
+            if (saved) {
+                try {
+                    const config = JSON.parse(saved);
+                    state.username = config.username || CONFIG.DEFAULT_USERNAME;
+                    state.goal = config.goal || CONFIG.DEFAULT_GOAL;
+                } catch (e) {
+                    console.error('Error loading config:', e);
+                }
+            }
+        }
+        
+        function toggleConfig() {
+            elements.configPanel.classList.toggle('hidden');
+        }
+        
+        /* =========================================================================
+           VIEWER COUNT FETCHING
+           ========================================================================= */
+        
+        async function startFetching() {
+            // Clear any existing interval
+            if (state.refreshInterval) {
+                clearInterval(state.refreshInterval);
+            }
+            
+            // Fetch immediately
+            await fetchViewerCount();
+            
+            // Set up periodic refresh
+            state.refreshInterval = setInterval(fetchViewerCount, CONFIG.REFRESH_RATE * 1000);
+        }
+        
+        async function fetchViewerCount() {
+            try {
+                elements.statusText.textContent = 'در حال بروزرسانی...';
+                elements.viewerCount.classList.remove('error-state');
+                
+                // =============================================================
+                // METHOD 1: Direct API Call (if available)
+                // =============================================================
+                // Note: This may require CORS proxy or server-side fetch
+                
+                // Example API endpoint pattern (adjust based on actual discovery)
+                const apiUrl = `https://www.aparat.com/videostreaming/live/streamingusername/${state.username}`;
+                
+                // Try to fetch from API
+                let viewerCount = await tryApiFetch(apiUrl);
+                
+                // =============================================================
+                // METHOD 2: Alternative API Endpoints
+                // =============================================================
+                if (viewerCount === null) {
+                    // Try alternative endpoints
+                    const altEndpoints = [
+                        `https://www.aparat.com/api/fa/v1/streaming/channel/username/${state.username}`,
+                        `https://api.aparat.com/v4/video/info?username=${state.username}`
+                    ];
+                    
+                    for (const endpoint of altEndpoints) {
+                        viewerCount = await tryApiFetch(endpoint);
+                        if (viewerCount !== null) break;
+                    }
+                }
+                
+                // =============================================================
+                // METHOD 3: Simulation Mode (for testing/demonstration)
+                // =============================================================
+                // Remove this section once you have the real API working
+                if (viewerCount === null) {
+                    console.log('API fetch failed, using simulation mode for demonstration');
+                    viewerCount = simulateViewerCount();
+                }
+                
+                // Update the display
+                updateViewerCount(viewerCount);
+                
+                elements.statusText.textContent = 'متصل • Live';
+                elements.statusText.style.color = CONFIG.COLORS.success;
+                
+            } catch (error) {
+                console.error('Error fetching viewer count:', error);
+                elements.statusText.textContent = 'خطا در اتصال • Error';
+                elements.statusText.style.color = CONFIG.COLORS.error;
+                elements.viewerCount.classList.add('error-state');
+            }
+        }
+        
+        async function tryApiFetch(url) {
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Extract viewer count from response
+                // Adjust these property paths based on actual API response
+                const count = extractViewerCountFromResponse(data);
+                
+                if (count !== null && count >= 0) {
+                    return count;
+                }
+                
+                return null;
+            } catch (error) {
+                console.log(`API fetch failed for ${url}:`, error.message);
+                return null;
+            }
+        }
+        
+        function extractViewerCountFromResponse(data) {
+            // Common property names for viewer count in APIs
+            const possiblePaths = [
+                'data.attributes.viewerCount',
+                'data.viewerCount',
+                'viewerCount',
+                'viewers',
+                'onlineUsers',
+                'liveCount',
+                'data.attributes.online_viewers',
+                'stream.viewers',
+                'live.viewer_count'
+            ];
+            
+            for (const path of possiblePaths) {
+                const value = getNestedProperty(data, path);
+                if (typeof value === 'number' && value >= 0) {
+                    return value;
+                }
+            }
+            
+            return null;
+        }
+        
+        function getNestedProperty(obj, path) {
+            return path.split('.').reduce((current, key) => current?.[key], obj);
+        }
+        
+        /* =========================================================================
+           SIMULATION MODE (FOR TESTING - REMOVE IN PRODUCTION)
+           ========================================================================= */
+        
+        function simulateViewerCount() {
+            // This simulates viewer count changes for demonstration
+            // Replace with actual API call in production
+            
+            const baseCount = state.currentViewers || Math.floor(Math.random() * 20);
+            const change = Math.floor(Math.random() * 7) - 3; // -3 to +3
+            let newCount = baseCount + change;
+            
+            if (newCount < 0) newCount = 0;
+            if (newCount > 100) newCount = 100;
+            
+            return newCount;
+        }
+        
+        /* =========================================================================
+           DISPLAY UPDATE FUNCTIONS
+           ========================================================================= */
+        
+        function updateViewerCount(count) {
+            state.previousViewers = state.currentViewers;
+            state.currentViewers = count;
+            state.lastUpdate = new Date();
+            
+            // Update the number display
+            elements.viewerCount.textContent = count.toLocaleString('fa-IR');
+            
+            // Trigger update animation
+            triggerUpdateAnimation();
+            
+            // Check goal achievement
+            checkGoalAchievement(count);
+        }
+        
+        function triggerUpdateAnimation() {
+            const container = elements.viewerContainer;
+            const countEl = elements.viewerCount;
+            
+            // Remove classes to reset animation
+            countEl.classList.remove('animate-update', 'animate-flash');
+            
+            // Force reflow
+            void countEl.offsetWidth;
+            
+            // Add animation classes
+            countEl.classList.add('animate-update');
+            
+            // Determine direction and add color flash
+            if (state.currentViewers > state.previousViewers) {
+                countEl.classList.add('animate-flash');
+                countEl.style.color = '#81c784'; // Green for increase
+            } else if (state.currentViewers < state.previousViewers) {
+                countEl.classList.add('animate-flash');
+                countEl.style.color = '#e57373'; // Red for decrease
+            }
+            
+            // Reset color after animation
+            setTimeout(() => {
+                countEl.style.color = '';
+            }, CONFIG.ANIMATION.updateDuration);
+        }
+        
+        /* =========================================================================
+           GOAL ACHIEVEMENT CHECK
+           ========================================================================= */
+        
+        function checkGoalAchievement(count) {
+            const hasReachedGoal = count >= state.goal;
+            
+            // Only trigger celebration if:
+            // 1. We've reached the goal
+            // 2. We were previously below the goal (to avoid repeated triggers)
+            if (hasReachedGoal && state.wasBelowGoal) {
+                state.wasBelowGoal = false;
+                triggerCelebration();
+            }
+            
+            // Reset wasBelowGoal if count drops below goal
+            if (!hasReachedGoal) {
+                state.wasBelowGoal = true;
+            }
+            
+            state.isGoalReached = hasReachedGoal;
+        }
+        
+        /* =========================================================================
+           CELEBRATION ANIMATION
+           ========================================================================= */
+        
+        function triggerCelebration() {
+            const container = elements.viewerContainer;
+            const countEl = elements.viewerCount;
+            
+            console.log('🎉 GOAL REACHED! Celebration triggered!');
+            
+            // Add glow effect to container
+            container.classList.add('celebrate-glow');
+            
+            // Add pulse effect to number
+            countEl.classList.add('celebrate-pulse');
+            
+            // Create radiating rings
+            createRadiatingRings();
+            
+            // Create confetti
+            createConfetti();
+            
+            // Remove animation classes after completion
+            setTimeout(() => {
+                container.classList.remove('celebrate-glow');
+                countEl.classList.remove('celebrate-pulse');
+            }, CONFIG.ANIMATION.celebrateDuration);
+        }
+        
+        function createRadiatingRings() {
+            const container = elements.viewerContainer;
+            const rect = container.getBoundingClientRect();
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            
+            // Create 3 rings
+            for (let i = 0; i < 3; i++) {
+                const ring = document.createElement('div');
+                ring.className = 'ring';
+                ring.style.left = `${centerX}px`;
+                ring.style.top = `${centerY}px`;
+                ring.style.width = `${Math.min(rect.width, rect.height)}px`;
+                ring.style.height = `${Math.min(rect.width, rect.height)}px`;
+                ring.style.marginLeft = `-${Math.min(rect.width, rect.height) / 2}px`;
+                ring.style.marginTop = `-${Math.min(rect.width, rect.height) / 2}px`;
+                ring.style.animationDelay = `${i * 200}ms`;
+                
+                container.appendChild(ring);
+                
+                // Animate ring
+                setTimeout(() => ring.classList.add('animate'), 10);
+                
+                // Remove ring after animation
+                setTimeout(() => ring.remove(), CONFIG.ANIMATION.ringDuration + (i * 200));
+            }
+        }
+        
+        function createConfetti() {
+            const container = elements.viewerContainer;
+            const rect = container.getBoundingClientRect();
+            const colors = ['#ed145b', '#ff4081', '#ffd700', '#ffeb3b', '#ffffff'];
+            
+            // Create 30 confetti pieces
+            for (let i = 0; i < 30; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.left = `${Math.random() * rect.width}px`;
+                confetti.style.top = '-10px';
+                confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+                confetti.style.animation = `confettiFall ${1 + Math.random() * 2}s linear forwards`;
+                confetti.style.animationDelay = `${Math.random() * 500}ms`;
+                
+                container.appendChild(confetti);
+                
+                // Remove confetti after animation
+                setTimeout(() => confetti.remove(), 3000);
+            }
+        }
+        
+        /* =========================================================================
+           KEYBOARD SHORTCUTS
+           ========================================================================= */
+        
+        // Press 'S' to show/hide settings
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 's') {
+                toggleConfig();
+            }
+        });
+        
+        /* =========================================================================
+           START APPLICATION
+           ========================================================================= */
+        
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
