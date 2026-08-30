@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aparat Follower Monitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .container { width: 100%; max-width: 600px; background: #1a1a1a; border-radius: 16px; padding: 30px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+        h1 { text-align: center; margin-bottom: 25px; color: #ed145b; font-size: 1.8rem; }
+        .config-section { background: #252525; border-radius: 12px; padding: 20px; margin-bottom: 25px; }
+        .config-row { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; color: #b0b0b0; font-size: 0.9rem; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 12px 15px; border: 2px solid #333; border-radius: 8px; background: #1a1a1a; color: #fff; font-size: 1rem; }
+        input:focus, select:focus { outline: none; border-color: #ed145b; }
+        .btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #ed145b, #c4104a); color: #fff; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(237,20,91,0.4); }
+        .display-section { text-align: center; padding: 40px 20px; background: #0f0f0f; border-radius: 12px; margin-top: 25px; position: relative; overflow: hidden; }
+        .follower-display { font-size: 3.5rem; font-weight: bold; color: #fff; text-shadow: 0 0 20px rgba(237,20,91,0.5); direction: ltr; }
+        .status-text { margin-top: 10px; color: #888; font-size: 0.9rem; }
+        .channel-name { margin-top: 15px; color: #ed145b; font-size: 1.1rem; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes bounce { 0% { transform: scale(0.3); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes goldenGlow { 0%,100% { box-shadow: 0 0 20px #ffd700, 0 0 40px #ffd700; } 50% { box-shadow: 0 0 60px #ffd700, 0 0 100px #ffd700; } }
+        @keyframes rainbowBorder { 0% { border-color: #ff0000; } 33% { border-color: #00ff00; } 66% { border-color: #0000ff; } 100% { border-color: #ff0000; } }
+        .anim-fade { animation: fadeIn 0.6s ease-out; }
+        .anim-bounce { animation: bounce 0.7s cubic-bezier(0.68,-0.55,0.265,1.55); }
+        .anim-slide { animation: slideUp 0.5s ease-out; }
+        .goal-golden { animation: goldenGlow 1.5s ease-in-out infinite; border: 3px solid #ffd700 !important; }
+        .goal-rainbow { animation: rainbowBorder 2s linear infinite; border: 3px solid transparent !important; }
+        .polling-indicator { display: inline-block; width: 8px; height: 8px; background: #4CAF50; border-radius: 50%; margin-right: 8px; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .error-message { background: #ff4444; color: #fff; padding: 10px 15px; border-radius: 8px; margin-top: 15px; text-align: center; display: none; }
+        .stats-row { display: flex; justify-content: space-around; margin-top: 20px; padding-top: 20px; border-top: 1px solid #333; }
+        .stat-value { font-size: 1.5rem; font-weight: bold; color: #ed145b; }
+        .stat-label { font-size: 0.8rem; color: #888; margin-top: 5px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Aparat Follower Monitor</h1>
+        <div class="config-section">
+            <div class="config-row"><label>Channel Username:</label><input type="text" id="username" placeholder="e.g., ESI.KHERSI" value="ESI.KHERSI"></div>
+            <div class="config-row"><label>Session Goal:</label><input type="number" id="goal" placeholder="e.g., 78000" value="78000"></div>
+            <div class="config-row"><label>Display Format:</label><select id="displayFormat"><option value="A">New / Total (+2 / 3201)</option><option value="B">New / Goal (+4 / 10)</option><option value="C">Total Only (3201)</option></select></div>
+            <div class="config-row"><label>New Follower Animation:</label><select id="newFollowerAnim"><option value="fade">Fade</option><option value="bounce">Bounce</option><option value="slide">Slide Up</option></select></div>
+            <div class="config-row"><label>Goal Reached Animation:</label><select id="goalAnim"><option value="golden">Golden Glow</option><option value="rainbow">Rainbow Border</option></select></div>
+            <button class="btn" id="startBtn" onclick="startMonitoring()">Start Monitoring</button>
+            <button class="btn hidden" id="stopBtn" onclick="stopMonitoring()" style="margin-top:10px;background:#666;">Stop</button>
+            <div class="error-message" id="errorMsg"></div>
+        </div>
+        <div class="display-section" id="displaySection">
+            <div class="follower-display" id="followerDisplay">--</div>
+            <div class="status-text"><span id="statusText">Waiting...</span><span class="polling-indicator hidden" id="pollingIndicator"></span></div>
+            <div class="channel-name" id="channelName"></div>
+            <div class="stats-row hidden" id="statsRow">
+                <div class="stat-item"><div class="stat-value" id="newFollowersStat">0</div><div class="stat-label">New This Session</div></div>
+                <div class="stat-item"><div class="stat-value" id="totalFollowersStat">--</div><div class="stat-label">Total Followers</div></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let monitoringInterval = null, baselineFollowers = null, previousFollowers = null, totalNewFollowers = 0, goalReached = false;
+        const POLL_INTERVAL = 5000;
+
+        function parseFollowerCount(str) {
+            if (!str) return 0;
+            const persian = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'], arabic = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+            let n = str;
+            persian.forEach((d,i) => n = n.replace(new RegExp(d,'g'), i));
+            arabic.forEach((d,i) => n = n.replace(new RegExp(d,'g'), i));
+            n = n.toLowerCase();
+            if (n.includes('هزار')) return Math.round(parseFloat(n.replace(/[^0-9.]/g,'')) * 1000);
+            if (n.includes('میلیون') || n.includes('مليون')) return Math.round(parseFloat(n.replace(/[^0-9.]/g,'')) * 1000000);
+            const m = n.match(/[\d.]+/);
+            return m ? Math.round(parseFloat(m[0])) : 0;
+        }
+
+        async function fetchFollowerData(username) {
+            const res = await fetch(`https://www.aparat.com/api/fa/v2/Live/LiveStream/show/username/${username}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (data.errors) throw new Error(data.errors[0]?.detail || 'API Error');
+            const cnt = data.profile?.follow?.follower_cnt;
+            if (!cnt) throw new Error('No follower count');
+            return { count: parseFollowerCount(cnt), username: data.profile?.username || username };
+        }
+
+        function formatDisplay(newF, total, goal) {
+            const fmt = document.getElementById('displayFormat').value;
+            if (fmt === 'A') return `+${newF} / ${total.toLocaleString()}`;
+            if (fmt === 'B') return `+${newF} / ${goal.toLocaleString()}`;
+            return total.toLocaleString();
+        }
+
+        function triggerNewFollowerAnimation() {
+            const type = document.getElementById('newFollowerAnim').value;
+            const el = document.getElementById('followerDisplay');
+            el.classList.remove('anim-fade','anim-bounce','anim-slide');
+            void el.offsetWidth;
+            el.classList.add(`anim-${type}`);
+            setTimeout(() => el.classList.remove('anim-fade','anim-bounce','anim-slide'), 1000);
+        }
+
+        function triggerGoalAnimation() {
+            const type = document.getElementById('goalAnim').value;
+            const el = document.getElementById('displaySection');
+            el.classList.remove('goal-golden','goal-rainbow');
+            void el.offsetWidth;
+            el.classList.add(`goal-${type}`);
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg; el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
+        }
+
+        async function pollFollowers() {
+            const username = document.getElementById('username').value.trim();
+            const goal = parseInt(document.getElementById('goal').value) || 0;
+            if (!username) { showError('Enter username'); return; }
+            try {
+                const data = await fetchFollowerData(username);
+                const current = data.count;
+                document.getElementById('channelName').textContent = `@${data.username}`;
+                if (baselineFollowers === null) {
+                    baselineFollowers = previousFollowers = current;
+                    totalNewFollowers = 0; goalReached = false;
+                    document.getElementById('displaySection').classList.remove('goal-golden','goal-rainbow');
+                    document.getElementById('statusText').textContent = 'Monitoring...';
+                    document.getElementById('pollingIndicator').classList.remove('hidden');
+                    document.getElementById('statsRow').classList.remove('hidden');
+                } else {
+                    if (current > previousFollowers) {
+                        const diff = current - previousFollowers;
+                        totalNewFollowers += diff;
+                        triggerNewFollowerAnimation();
+                        document.getElementById('statusText').textContent = `+${diff} new!`;
+                    }
+                    if (!goalReached && goal > 0 && current >= goal) {
+                        goalReached = true;
+                        triggerGoalAnimation();
+                        document.getElementById('statusText').textContent = '🎉 Goal Reached! 🎉';
+                    } else if (!goalReached) document.getElementById('statusText').textContent = 'Monitoring...';
+                    previousFollowers = current;
+                }
+                document.getElementById('followerDisplay').textContent = formatDisplay(totalNewFollowers, current, goal);
+                document.getElementById('newFollowersStat').textContent = '+' + totalNewFollowers.toLocaleString();
+                document.getElementById('totalFollowersStat').textContent = current.toLocaleString();
+            } catch (err) {
+                console.error(err);
+                showError('Error: ' + err.message);
+                if (baselineFollowers === null) document.getElementById('statusText').textContent = 'Click Start to retry';
+            }
+        }
+
+        function startMonitoring() {
+            const username = document.getElementById('username').value.trim();
+            if (!username) { showError('Enter username'); return; }
+            baselineFollowers = null; previousFollowers = null; totalNewFollowers = 0; goalReached = false;
+            document.getElementById('displaySection').classList.remove('goal-golden','goal-rainbow');
+            document.getElementById('followerDisplay').textContent = '--';
+            document.getElementById('statusText').textContent = 'Loading...';
+            document.getElementById('statsRow').classList.add('hidden');
+            document.getElementById('startBtn').classList.add('hidden');
+            document.getElementById('stopBtn').classList.remove('hidden');
+            pollFollowers();
+            monitoringInterval = setInterval(pollFollowers, POLL_INTERVAL);
+        }
+
+        function stopMonitoring() {
+            if (monitoringInterval) { clearInterval(monitoringInterval); monitoringInterval = null; }
+            document.getElementById('pollingIndicator').classList.add('hidden');
+            document.getElementById('statusText').textContent = 'Stopped';
+            document.getElementById('startBtn').classList.remove('hidden');
+            document.getElementById('stopBtn').classList.add('hidden');
+        }
+
+        document.addEventListener('keypress', e => {
+            if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
+                document.getElementById('startBtn').classList.contains('hidden') ? stopMonitoring() : startMonitoring();
+            }
+        });
+    </script>
+</body>
+</html>
