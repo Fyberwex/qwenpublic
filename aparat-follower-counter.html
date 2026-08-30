@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBS Follower Counter Overlay</title>
+    
+    <!--
+    =============================================================================
+    APARAT FOLLOWER COUNTER OVERLAY FOR OBS STUDIO
+    =============================================================================
+    
+    HOW TO USE IN OBS:
+    1. Add a new "Browser Source" in OBS
+    2. Check "Local File" and select this HTML file
+    3. Set Width: 1920, Height: 1080 (or your desired resolution)
+    4. The widget will appear with a transparent background
+    
+    CUSTOMIZATION:
+    - Scroll down to the "CONFIGURATION SECTION" in the JavaScript below
+    - Change username, goal, display format, animations, and more
+    
+    API ENDPOINT:
+    https://www.aparat.com/etc/api/profile/username/{USERNAME}
+    
+    =============================================================================
+    -->
+    
+    <style>
+        /* =========================================================================
+           BASE STYLES - Transparent background for OBS
+           ========================================================================= */
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: transparent;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Main container */
+        .follower-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            padding: 30px 50px;
+            background: transparent;
+            transition: all 0.3s ease;
+        }
+        
+        /* Label text */
+        .follower-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-weight: 600;
+        }
+        
+        /* Main follower count display */
+        .follower-display {
+            font-size: 80px;
+            font-weight: 900;
+            color: #ffffff;
+            text-shadow: 
+                0 0 20px rgba(255, 255, 255, 0.5),
+                0 0 40px rgba(255, 255, 255, 0.3),
+                0 4px 8px rgba(0, 0, 0, 0.5);
+            line-height: 1;
+            white-space: nowrap;
+        }
+        
+        /* New follower indicator (+N) */
+        .new-follower {
+            color: #4caf50;
+            display: inline-block;
+        }
+        
+        /* Goal text */
+        .goal-reached-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+            margin-top: 10px;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+        }
+        
+        /* Loading state */
+        .loading {
+            opacity: 0.5;
+        }
+        
+        /* Error state */
+        .error {
+            color: #f44336 !important;
+        }
+        
+        /* =========================================================================
+           NEW FOLLOWER ANIMATIONS
+           ========================================================================= */
+        
+        /* Fade animation */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .animate-fade {
+            animation: fadeIn 0.5s ease forwards;
+        }
+        
+        /* Typewriter animation */
+        @keyframes typewriter {
+            from { width: 0; }
+            to { width: 100%; }
+        }
+        
+        .typewriter-wrapper {
+            display: inline-block;
+            overflow: hidden;
+            white-space: nowrap;
+            animation: typewriter 0.5s steps(10, end) forwards;
+        }
+        
+        /* Bounce animation */
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.5); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .animate-bounce {
+            animation: bounceIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+        }
+        
+        /* SlideUp animation */
+        @keyframes slideUpIn {
+            from { 
+                transform: translateY(30px);
+                opacity: 0;
+            }
+            to { 
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .animate-slideUp {
+            animation: slideUpIn 0.5s ease forwards;
+        }
+        
+        /* =========================================================================
+           GOAL REACHED ANIMATIONS
+           ========================================================================= */
+        
+        /* Golden Glow */
+        @keyframes goldenGlow {
+            0%, 100% { 
+                text-shadow: 
+                    0 0 20px rgba(255, 215, 0, 0.8),
+                    0 0 40px rgba(255, 215, 0, 0.6),
+                    0 0 60px rgba(255, 215, 0, 0.4),
+                    0 4px 8px rgba(0, 0, 0, 0.5);
+            }
+            50% { 
+                text-shadow: 
+                    0 0 40px rgba(255, 215, 0, 1),
+                    0 0 80px rgba(255, 215, 0, 0.9),
+                    0 0 120px rgba(255, 215, 0, 0.7),
+                    0 0 160px rgba(255, 215, 0, 0.5),
+                    0 4px 8px rgba(0, 0, 0, 0.5);
+            }
+        }
+        
+        .goal-goldenGlow .follower-display {
+            animation: goldenGlow 1.5s ease-in-out infinite;
+        }
+        
+        /* Rainbow Border */
+        @keyframes rainbowBorder {
+            0% { border-color: #ff0000; box-shadow: 0 0 30px rgba(255, 0, 0, 0.5); }
+            14% { border-color: #ff7f00; box-shadow: 0 0 30px rgba(255, 127, 0, 0.5); }
+            28% { border-color: #ffff00; box-shadow: 0 0 30px rgba(255, 255, 0, 0.5); }
+            42% { border-color: #00ff00; box-shadow: 0 0 30px rgba(0, 255, 0, 0.5); }
+            57% { border-color: #0000ff; box-shadow: 0 0 30px rgba(0, 0, 255, 0.5); }
+            71% { border-color: #4b0082; box-shadow: 0 0 30px rgba(75, 0, 130, 0.5); }
+            85% { border-color: #9400d3; box-shadow: 0 0 30px rgba(148, 0, 211, 0.5); }
+            100% { border-color: #ff0000; box-shadow: 0 0 30px rgba(255, 0, 0, 0.5); }
+        }
+        
+        .goal-rainbowBorder .follower-container {
+            border: 4px solid transparent;
+            border-radius: 20px;
+            animation: rainbowBorder 2s linear infinite;
+        }
+        
+        /* Pulse Explode */
+        @keyframes pulseExplode {
+            0%, 100% { 
+                transform: scale(1);
+                filter: brightness(1);
+            }
+            25% { 
+                transform: scale(1.1);
+                filter: brightness(1.3);
+            }
+            50% { 
+                transform: scale(1.2);
+                filter: brightness(1.5);
+            }
+            75% { 
+                transform: scale(1.1);
+                filter: brightness(1.3);
+            }
+        }
+        
+        .goal-pulseExplode .follower-display {
+            animation: pulseExplode 1s ease-in-out infinite;
+        }
+        
+        /* =========================================================================
+           CONFIG PANEL (Hidden by default, press 'C' to toggle)
+           ========================================================================= */
+        
+        .config-panel {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 25px;
+            border-radius: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            z-index: 1000;
+            display: none;
+            max-width: 90vw;
+        }
+        
+        .config-panel.visible {
+            display: block;
+        }
+        
+        .config-panel h2 {
+            color: #fff;
+            margin-bottom: 20px;
+            font-size: 20px;
+            text-align: center;
+        }
+        
+        .config-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .config-item label {
+            color: #aaa;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .config-item input,
+        .config-item select {
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .config-item input:focus,
+        .config-item select:focus {
+            border-color: #4caf50;
+            background: rgba(76, 175, 80, 0.2);
+        }
+        
+        .config-item select option {
+            background: #333;
+            color: #fff;
+        }
+        
+        .config-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        
+        .config-btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .config-btn-save {
+            background: linear-gradient(135deg, #4caf50, #45a049);
+            color: #fff;
+        }
+        
+        .config-btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+        }
+        
+        .config-btn-close {
+            background: linear-gradient(135deg, #666, #888);
+            color: #fff;
+        }
+        
+        .config-btn-close:hover {
+            background: linear-gradient(135deg, #888, #aaa);
+        }
+        
+        .toggle-hint {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 999;
+        }
+        
+        .toggle-hint:hover {
+            color: rgba(255, 255, 255, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <!-- Configuration Panel -->
+    <div class="config-panel" id="configPanel">
+        <h2>⚙️ Follower Counter Settings</h2>
+        
+        <div class="config-row">
+            <div class="config-item">
+                <label>Username</label>
+                <input type="text" id="cfgUsername" placeholder="aparatusername">
+            </div>
+            <div class="config-item">
+                <label>Refresh Interval (seconds)</label>
+                <input type="number" id="cfgRefreshInterval" value="5" min="1" max="60">
+            </div>
+        </div>
+        
+        <div class="config-row">
+            <div class="config-item">
+                <label>Session Goal</label>
+                <input type="number" id="cfgSessionGoal" value="10" min="1">
+            </div>
+            <div class="config-item">
+                <label>Display Format</label>
+                <select id="cfgDisplayFormat">
+                    <option value="new_total">new_total (+N / Total)</option>
+                    <option value="new_goal">new_goal (+N / Goal)</option>
+                    <option value="total_only">total_only (Total only)</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="config-row">
+            <div class="config-item">
+                <label>New Follower Animation</label>
+                <select id="cfgNewFollowerAnimation">
+                    <option value="fade">fade</option>
+                    <option value="typewriter">typewriter</option>
+                    <option value="bounce">bounce</option>
+                    <option value="slideUp">slideUp</option>
+                </select>
+            </div>
+            <div class="config-item">
+                <label>Goal Reached Animation</label>
+                <select id="cfgGoalReachedAnimation">
+                    <option value="goldenGlow">goldenGlow</option>
+                    <option value="rainbowBorder">rainbowBorder</option>
+                    <option value="pulseExplode">pulseExplode</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="config-row">
+            <div class="config-item">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="cfgResetGoalOnDrop" style="width: auto;">
+                    Reset Goal on Drop
+                </label>
+            </div>
+        </div>
+        
+        <div class="config-buttons">
+            <button class="config-btn config-btn-save" onclick="saveConfig()">Save & Apply</button>
+            <button class="config-btn config-btn-close" onclick="toggleConfig()">Close</button>
+        </div>
+    </div>
+    
+    <!-- Toggle Config Hint -->
+    <div class="toggle-hint" onclick="toggleConfig()">⚙️ Press 'C' for Settings</div>
+    
+    <!-- Main Follower Display -->
+    <div class="follower-container" id="followerContainer">
+        <div class="follower-label">Followers</div>
+        <div class="follower-display" id="followerDisplay">
+            <span class="loading">Loading...</span>
+        </div>
+    </div>
+    
+    <script>
+        /* =========================================================================
+           CONFIGURATION SECTION - ADJUST SETTINGS HERE
+           ========================================================================= */
+        
+        const CONFIG = {
+            // Basic Settings
+            username: "esi.khersi",           // Change this to any Aparat username
+            refreshInterval: 5,               // Seconds between polls
+            sessionGoal: 10,                  // Follower goal for this stream session
+            
+            // Display Format (Choose ONE)
+            // Options: "new_total" (e.g., +2 / 3201), "new_goal" (e.g., +4 / 10), "total_only" (e.g., 3201)
+            displayFormat: "new_goal",
+            
+            // Animation for EVERY new follower event
+            // Options: "fade", "typewriter", "bounce", "slideUp"
+            newFollowerAnimation: "bounce",
+            
+            // Animation for when the GOAL is reached
+            // Options: "goldenGlow", "rainbowBorder", "pulseExplode"
+            goalReachedAnimation: "rainbowBorder",
+            
+            // Optional: Reset goal celebration if followers drop below goal
+            resetGoalOnDrop: false
+        };
+        
+        /* =========================================================================
+           STATE MANAGEMENT
+           ========================================================================= */
+        
+        let state = {
+            totalFollowers: 0,
+            previousFollowers: 0,
+            newFollowersCount: 0,          // Cumulative new followers since page load
+            isGoalReached: false,
+            wasBelowGoal: true,            // Track if we dropped below goal
+            lastUpdate: null,
+            pollInterval: null,
+            isLoading: true
+        };
+        
+        /* =========================================================================
+           DOM ELEMENTS
+           ========================================================================= */
+        
+        const elements = {
+            container: document.getElementById('followerContainer'),
+            display: document.getElementById('followerDisplay'),
+            configPanel: document.getElementById('configPanel'),
+            inputs: {
+                username: document.getElementById('cfgUsername'),
+                refreshInterval: document.getElementById('cfgRefreshInterval'),
+                sessionGoal: document.getElementById('cfgSessionGoal'),
+                displayFormat: document.getElementById('cfgDisplayFormat'),
+                newFollowerAnimation: document.getElementById('cfgNewFollowerAnimation'),
+                goalReachedAnimation: document.getElementById('cfgGoalReachedAnimation'),
+                resetGoalOnDrop: document.getElementById('cfgResetGoalOnDrop')
+            }
+        };
+        
+        /* =========================================================================
+           API FETCHING
+           ========================================================================= */
+        
+        /**
+         * Fetch follower count from Aparat API
+         * Uses the profile endpoint and parses follower_cnt
+         */
+        async function fetchFollowerCount(username) {
+            try {
+                const url = `https://www.aparat.com/etc/api/profile/username/${username}`;
+                
+                // Use a proxy or direct fetch (may need CORS handling)
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Parse the follower_count from the profile object
+                // The API returns follower_cnt which may be a decimal like 77.7
+                if (data && data.profile && data.profile.follower_cnt !== undefined) {
+                    // Convert to actual number (the API rounds, but we get the raw value)
+                    const followerCnt = parseFloat(data.profile.follower_cnt);
+                    
+                    // If it's a decimal, we multiply to get the actual count
+                    // e.g., 77.7 means 77,700 or we interpret based on context
+                    // For this implementation, we'll use Math.floor for whole numbers
+                    // or multiply by 1000 if it appears to be in thousands
+                    
+                    let actualFollowers;
+                    if (followerCnt < 100 && followerCnt % 1 !== 0) {
+                        // Likely in thousands with decimal (e.g., 77.7 = 77,700)
+                        actualFollowers = Math.round(followerCnt * 1000);
+                    } else {
+                        // Already a whole number or large enough
+                        actualFollowers = Math.round(followerCnt);
+                    }
+                    
+                    return {
+                        success: true,
+                        count: actualFollowers,
+                        rawValue: followerCnt
+                    };
+                }
+                
+                throw new Error('Invalid API response structure');
+                
+            } catch (error) {
+                console.error('Error fetching follower count:', error);
+                return {
+                    success: false,
+                    error: error.message,
+                    count: state.totalFollowers // Return last known count
+                };
+            }
+        }
+        
+        /* =========================================================================
+           DISPLAY LOGIC
+           ========================================================================= */
+        
+        /**
+         * Format the display text based on CONFIG.displayFormat
+         */
+        function formatDisplay(newCount, totalFollowers, sessionGoal) {
+            switch (CONFIG.displayFormat) {
+                case 'new_total':
+                    return `+${newCount} / ${formatNumber(totalFollowers)}`;
+                case 'new_goal':
+                    return `+${newCount} / ${sessionGoal}`;
+                case 'total_only':
+                default:
+                    return `${formatNumber(totalFollowers)}`;
+            }
+        }
+        
+        /**
+         * Format number with commas (e.g., 1000 -> 1,000)
+         */
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+        
+        /**
+         * Update the display with animation
+         */
+        function updateDisplay(hasNewFollowers = false) {
+            const newText = formatDisplay(
+                state.newFollowersCount,
+                state.totalFollowers,
+                CONFIG.sessionGoal
+            );
+            
+            // Clear previous content
+            elements.display.innerHTML = '';
+            
+            // Remove any existing animation classes
+            elements.display.className = 'follower-display';
+            
+            // Force reflow for animation restart
+            void elements.display.offsetWidth;
+            
+            // Create the content
+            if (hasNewFollowers && CONFIG.displayFormat !== 'total_only') {
+                // Create span for new follower count with animation
+                const newSpan = document.createElement('span');
+                newSpan.className = 'new-follower';
+                newSpan.textContent = `+${state.newFollowersCount}`;
+                
+                // Apply the selected animation
+                const animationClass = getAnimationClass(CONFIG.newFollowerAnimation);
+                if (animationClass) {
+                    newSpan.classList.add(animationClass);
+                }
+                
+                // Special handling for typewriter
+                if (CONFIG.newFollowerAnimation === 'typewriter') {
+                    const wrapper = document.createElement('span');
+                    wrapper.className = 'typewriter-wrapper';
+                    wrapper.appendChild(newSpan);
+                    elements.display.appendChild(wrapper);
+                } else {
+                    elements.display.appendChild(newSpan);
+                }
+                
+                // Add separator if needed
+                if (CONFIG.displayFormat === 'new_total' || CONFIG.displayFormat === 'new_goal') {
+                    const separator = document.createTextNode(' / ');
+                    elements.display.appendChild(separator);
+                }
+                
+                // Add the rest of the text
+                const restText = CONFIG.displayFormat === 'new_total' 
+                    ? formatNumber(state.totalFollowers)
+                    : CONFIG.sessionGoal.toString();
+                elements.display.appendChild(document.createTextNode(restText));
+            } else {
+                // No new followers or total_only format
+                elements.display.textContent = newText;
+            }
+            
+            elements.isLoading = false;
+        }
+        
+        /**
+         * Get the CSS animation class for the selected animation
+         */
+        function getAnimationClass(animationName) {
+            const animationMap = {
+                'fade': 'animate-fade',
+                'typewriter': 'typewriter-wrapper',
+                'bounce': 'animate-bounce',
+                'slideUp': 'animate-slideUp'
+            };
+            return animationMap[animationName] || 'animate-fade';
+        }
+        
+        /**
+         * Apply goal reached animation to container
+         */
+        function applyGoalAnimation() {
+            // Remove any existing goal animation classes
+            elements.container.className = 'follower-container';
+            
+            // Force reflow
+            void elements.container.offsetWidth;
+            
+            // Add the new goal animation class
+            elements.container.classList.add(`goal-${CONFIG.goalReachedAnimation}`);
+        }
+        
+        /**
+         * Remove goal animation if needed
+         */
+        function removeGoalAnimation() {
+            elements.container.className = 'follower-container';
+        }
+        
+        /* =========================================================================
+           MAIN POLLING LOGIC
+           ========================================================================= */
+        
+        /**
+         * Poll for new follower count
+         */
+        async function pollFollowers() {
+            if (state.isLoading) {
+                elements.display.innerHTML = '<span class="loading">Loading...</span>';
+            }
+            
+            const result = await fetchFollowerCount(CONFIG.username);
+            
+            if (result.success) {
+                const newCount = result.count;
+                const previousCount = state.totalFollowers;
+                
+                state.previousFollowers = previousCount;
+                state.totalFollowers = newCount;
+                state.lastUpdate = new Date();
+                
+                // Check for new followers
+                if (newCount > previousCount && previousCount > 0) {
+                    const gained = newCount - previousCount;
+                    state.newFollowersCount += gained;
+                    
+                    console.log(`🎉 New follower(s): +${gained} (Total new: ${state.newFollowersCount})`);
+                    
+                    // Update display with animation
+                    updateDisplay(true);
+                } else if (previousCount === 0) {
+                    // First load
+                    updateDisplay(false);
+                    console.log(`📊 Initial follower count: ${formatNumber(newCount)}`);
+                } else {
+                    // No change
+                    updateDisplay(false);
+                }
+                
+                // Check goal status
+                checkGoalStatus();
+                
+            } else {
+                console.error('Failed to fetch followers:', result.error);
+                if (!elements.isLoading) {
+                    elements.display.classList.add('error');
+                    elements.display.textContent = 'Error';
+                }
+            }
+            
+            state.isLoading = false;
+        }
+        
+        /**
+         * Check if goal has been reached
+         */
+        function checkGoalStatus() {
+            const goalReached = state.totalFollowers >= CONFIG.sessionGoal;
+            
+            if (goalReached && !state.isGoalReached) {
+                // Goal just reached!
+                state.isGoalReached = true;
+                state.wasBelowGoal = false;
+                console.log('🎯 GOAL REACHED!');
+                applyGoalAnimation();
+            } else if (!goalReached && state.isGoalReached && CONFIG.resetGoalOnDrop) {
+                // Dropped below goal and reset is enabled
+                state.isGoalReached = false;
+                state.wasBelowGoal = true;
+                console.log('📉 Dropped below goal, resetting animation');
+                removeGoalAnimation();
+            }
+        }
+        
+        /* =========================================================================
+           CONFIGURATION UI
+           ========================================================================= */
+        
+        /**
+         * Toggle configuration panel visibility
+         */
+        function toggleConfig() {
+            const isVisible = elements.configPanel.classList.contains('visible');
+            
+            if (isVisible) {
+                elements.configPanel.classList.remove('visible');
+            } else {
+                // Load current config into inputs
+                loadConfigToInputs();
+                elements.configPanel.classList.add('visible');
+            }
+        }
+        
+        /**
+         * Load current CONFIG values into input fields
+         */
+        function loadConfigToInputs() {
+            elements.inputs.username.value = CONFIG.username;
+            elements.inputs.refreshInterval.value = CONFIG.refreshInterval;
+            elements.inputs.sessionGoal.value = CONFIG.sessionGoal;
+            elements.inputs.displayFormat.value = CONFIG.displayFormat;
+            elements.inputs.newFollowerAnimation.value = CONFIG.newFollowerAnimation;
+            elements.inputs.goalReachedAnimation.value = CONFIG.goalReachedAnimation;
+            elements.inputs.resetGoalOnDrop.checked = CONFIG.resetGoalOnDrop;
+        }
+        
+        /**
+         * Save configuration from inputs
+         */
+        function saveConfig() {
+            // Read values from inputs
+            const newUsername = elements.inputs.username.value.trim();
+            const newRefreshInterval = parseInt(elements.inputs.refreshInterval.value) || 5;
+            const newSessionGoal = parseInt(elements.inputs.sessionGoal.value) || 10;
+            const newDisplayFormat = elements.inputs.displayFormat.value;
+            const newNewFollowerAnimation = elements.inputs.newFollowerAnimation.value;
+            const newGoalReachedAnimation = elements.inputs.goalReachedAnimation.value;
+            const newResetGoalOnDrop = elements.inputs.resetGoalOnDrop.checked;
+            
+            // Validate username
+            if (!newUsername) {
+                alert('Please enter a valid username');
+                return;
+            }
+            
+            // Update CONFIG
+            CONFIG.username = newUsername;
+            CONFIG.refreshInterval = Math.max(1, Math.min(60, newRefreshInterval));
+            CONFIG.sessionGoal = Math.max(1, newSessionGoal);
+            CONFIG.displayFormat = newDisplayFormat;
+            CONFIG.newFollowerAnimation = newNewFollowerAnimation;
+            CONFIG.goalReachedAnimation = newGoalReachedAnimation;
+            CONFIG.resetGoalOnDrop = newResetGoalOnDrop;
+            
+            // Save to localStorage
+            localStorage.setItem('aparatFollowerConfig', JSON.stringify(CONFIG));
+            
+            // Restart polling with new settings
+            restartPolling();
+            
+            // Close panel
+            toggleConfig();
+            
+            console.log('✅ Configuration saved');
+        }
+        
+        /**
+         * Restart the polling interval with new settings
+         */
+        function restartPolling() {
+            // Clear existing interval
+            if (state.pollInterval) {
+                clearInterval(state.pollInterval);
+            }
+            
+            // Reset state for fresh start
+            state.newFollowersCount = 0;
+            state.isGoalReached = false;
+            state.wasBelowGoal = true;
+            state.totalFollowers = 0;
+            state.previousFollowers = 0;
+            
+            // Remove any goal animations
+            removeGoalAnimation();
+            
+            // Start fresh polling
+            startPolling();
+        }
+        
+        /**
+         * Start the polling interval
+         */
+        function startPolling() {
+            // Immediate first fetch
+            pollFollowers();
+            
+            // Set up interval
+            state.pollInterval = setInterval(pollFollowers, CONFIG.refreshInterval * 1000);
+        }
+        
+        /**
+         * Load saved configuration from localStorage
+         */
+        function loadSavedConfig() {
+            try {
+                const saved = localStorage.getItem('aparatFollowerConfig');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    Object.assign(CONFIG, parsed);
+                    console.log('📁 Loaded saved configuration');
+                }
+            } catch (e) {
+                console.error('Error loading saved config:', e);
+            }
+        }
+        
+        /* =========================================================================
+           INITIALIZATION
+           ========================================================================= */
+        
+        // Keyboard shortcut for config (Press 'C')
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'c' && !e.ctrlKey && !e.metaKey) {
+                toggleConfig();
+            }
+        });
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load saved config
+            loadSavedConfig();
+            
+            // Start polling
+            startPolling();
+            
+            console.log('🚀 Follower Counter initialized');
+            console.log(`📺 Username: ${CONFIG.username}`);
+            console.log(`🔄 Refresh Interval: ${CONFIG.refreshInterval}s`);
+            console.log(`🎯 Session Goal: ${CONFIG.sessionGoal}`);
+            console.log(`📊 Display Format: ${CONFIG.displayFormat}`);
+            console.log(`✨ New Follower Animation: ${CONFIG.newFollowerAnimation}`);
+            console.log(`🏆 Goal Animation: ${CONFIG.goalReachedAnimation}`);
+        });
+    </script>
+</body>
+</html>
